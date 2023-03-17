@@ -3,44 +3,35 @@ $signature = @"
 public static extern int NetShareEnum(
     string servername,
     int level,
-    out IntPtr bufptr,
+    out IntPtr bufPtr,
     int prefmaxlen,
     out int entriesread,
     out int totalentries,
-    ref int resume_handle
+    out int resume_handle
 );
 "@
 
-# Add the PInvoke signature to the current PowerShell session
-Add-Type -MemberDefinition $signature -Name Win32NetApi
+# Add the PInvoke signature to the PowerShell session
+Add-Type -MemberDefinition $signature -Namespace Win32 -Name NetApi32
 
-# Call the NetShareEnum function to retrieve a list of local shares
-$server = $env:COMPUTERNAME
-$level = 2 # Use level 2 to retrieve detailed information about the shares
-$bufptr = [IntPtr]::Zero
-$prefmaxlen = -1 # Use -1 to indicate that we want to retrieve all available shares
+# Call the NetShareEnum function to list local shares
+$bufPtr = [IntPtr]::Zero
 $entriesread = 0
 $totalentries = 0
 $resume_handle = 0
+$result = [Win32.NetApi32]::NetShareEnum($env:COMPUTERNAME, 1, [ref]$bufPtr, -1, [ref]$entriesread, [ref]$totalentries, [ref]$resume_handle)
 
-$result = [Win32NetApi]::NetShareEnum($server, $level, [ref]$bufptr, $prefmaxlen, [ref]$entriesread, [ref]$totalentries, [ref]$resume_handle)
+# Check if the call to NetShareEnum succeeded
+if ($result -eq 0) {
+    # Convert the pointer to a structure array and iterate over the shares
+    $shareInfo = [System.Runtime.InteropServices.Marshal]::PtrToStructure($bufPtr, [Type][Win32.SHARE_INFO_1])
+    for ($i = 0; $i -lt $entriesread; $i++) {
+        Write-Host $shareInfo[$i].shi1_netname
+    }
 
-if ($result -ne 0) {
-    throw "Failed to retrieve local shares. Error code: $result"
+    # Free the memory allocated by NetShareEnum
+    [Win32.NetApi32]::NetApiBufferFree($bufPtr)
 }
-
-# Convert the pointer to a structure that we can work with
-$share_info = [System.Runtime.InteropServices.Marshal]::PtrToStructure($bufptr, [System.Type]::GetType("Win32NetApi.SHARE_INFO_2"))
-
-# Loop through the shares and output their names and paths
-for ($i = 0; $i -lt $entriesread; $i++) {
-    $share_name = $share_info.shi2_netname
-    $share_path = $share_info.shi2_remark
-    Write-Host "Share Name: $share_name`nShare Path: $share_path`n"
-    
-    # Move the pointer to the next SHARE_INFO_2 structure
-    $share_info = [System.Runtime.InteropServices.Marshal]::PtrToStructure([IntPtr]($bufptr.ToInt64() + ($i + 1) * [System.Runtime.InteropServices.Marshal]::SizeOf($share_info)), [System.Type]::GetType("Win32NetApi.SHARE_INFO_2"))
+else {
+    Write-Error "NetShareEnum failed with error code $result"
 }
-
-# Free the buffer used to store the share information
-[Win32NetApi]::NetApiBufferFree($bufptr)
