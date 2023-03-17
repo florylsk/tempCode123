@@ -29,7 +29,7 @@ public static extern uint NetShareEnum(
 Add-Type -MemberDefinition $signature -Namespace Win32 -Name NetApi32
 
 # Call NetShareEnum to get a list of local shares
-$shares = New-Object System.Collections.Generic.List[System.String]
+$shares = New-Object System.Collections.Generic.List[System.Object]
 $bufPtr = [IntPtr]::Zero
 $entriesRead = 0
 $totalEntries = 0
