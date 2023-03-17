@@ -1,5 +1,5 @@
 $signature = @"
-[DllImport("netapi32.dll", SetLastError = true)]
+[DllImport("netapi32.dll", SetLastError=true)]
 public static extern int NetShareEnum(
     string servername,
     int level,
@@ -7,38 +7,40 @@ public static extern int NetShareEnum(
     int prefmaxlen,
     out int entriesread,
     out int totalentries,
-    out int resume_handle
+    ref int resume_handle
 );
 "@
 
-# Next, add the PInvoke signature to the current PowerShell session
-Add-Type -MemberDefinition $signature -Namespace Win32 -Name NetApi32
+# Add the PInvoke signature to the current PowerShell session
+Add-Type -MemberDefinition $signature -Name Win32NetApi
 
-# Then, call NetShareEnum to retrieve a list of local shares
-$serverName = $null  # null means local machine
-$level = 2  # use level 2 for detailed share information
-$prefMaxLen = -1  # -1 means allocate as much memory as necessary
-$bufPtr = [IntPtr]::Zero
-$entriesRead = 0
-$totalEntries = 0
-$resumeHandle = 0
+# Call the NetShareEnum function to retrieve a list of local shares
+$server = $env:COMPUTERNAME
+$level = 2 # Use level 2 to retrieve detailed information about the shares
+$bufptr = [IntPtr]::Zero
+$prefmaxlen = -1 # Use -1 to indicate that we want to retrieve all available shares
+$entriesread = 0
+$totalentries = 0
+$resume_handle = 0
 
-$netApiResult = [Win32.NetApi32]::NetShareEnum($serverName, $level, [ref] $bufPtr, $prefMaxLen, [ref] $entriesRead, [ref] $totalEntries, [ref] $resumeHandle)
+$result = [Win32NetApi]::NetShareEnum($server, $level, [ref]$bufptr, $prefmaxlen, [ref]$entriesread, [ref]$totalentries, [ref]$resume_handle)
 
-if ($netApiResult -eq 0) {
-    # Convert the unmanaged memory to a managed array of SHARE_INFO_2 structs
-    $shareInfoType = [Win32.NetApi32+SHARE_INFO_2]
-    $shareInfoArray = New-Object -TypeName $shareInfoType[] -ArgumentList $entriesRead
-    [Runtime.InteropServices.Marshal]::Copy($bufPtr, $shareInfoArray, 0, $entriesRead)
-
-    # Print the share names
-    foreach ($shareInfo in $shareInfoArray) {
-        Write-Host $shareInfo.shi2_netname
-    }
-
-    # Free the unmanaged memory
-    [Win32.NetApi32]::NetApiBufferFree($bufPtr) | Out-Null
+if ($result -ne 0) {
+    throw "Failed to retrieve local shares. Error code: $result"
 }
-else {
-    Write-Error "NetShareEnum failed with error code $netApiResult"
+
+# Convert the pointer to a structure that we can work with
+$share_info = [System.Runtime.InteropServices.Marshal]::PtrToStructure($bufptr, [System.Type]::GetType("Win32NetApi.SHARE_INFO_2"))
+
+# Loop through the shares and output their names and paths
+for ($i = 0; $i -lt $entriesread; $i++) {
+    $share_name = $share_info.shi2_netname
+    $share_path = $share_info.shi2_remark
+    Write-Host "Share Name: $share_name`nShare Path: $share_path`n"
+    
+    # Move the pointer to the next SHARE_INFO_2 structure
+    $share_info = [System.Runtime.InteropServices.Marshal]::PtrToStructure([IntPtr]($bufptr.ToInt64() + ($i + 1) * [System.Runtime.InteropServices.Marshal]::SizeOf($share_info)), [System.Type]::GetType("Win32NetApi.SHARE_INFO_2"))
 }
+
+# Free the buffer used to store the share information
+[Win32NetApi]::NetApiBufferFree($bufptr)
