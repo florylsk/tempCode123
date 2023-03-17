@@ -1,16 +1,3 @@
-# Define the ShareInfo1 class to match the struct used by NetShareEnum
-class ShareInfo1 {
-    [String] $shi1_netname
-    [UInt32] $shi1_type
-    [String] $shi1_remark
-
-    ShareInfo1([String] $netname, [UInt32] $type, [String] $remark) {
-        $this.shi1_netname = $netname
-        $this.shi1_type = $type
-        $this.shi1_remark = $remark
-    }
-}
-
 # Define the PInvoke function signature for NetShareEnum
 $signature = @"
 [DllImport("netapi32.dll", CharSet = CharSet.Unicode)]
@@ -42,10 +29,7 @@ if ($retval -eq 0) {
     $ptrType = [System.Runtime.InteropServices.Marshal]::SizeOf([Win32.ShareInfo1])
     for ($i = 0; $i -lt $entriesRead; $i++) {
         $ptr = [IntPtr]::Add($bufPtr, $ptrType * $i)
-        $netname = [System.Runtime.InteropServices.Marshal]::PtrToStringUni([IntPtr]::Add($ptr, [System.Runtime.InteropServices.Marshal]::OffsetOf([Win32.ShareInfo1], "shi1_netname")))
-        $type = [System.Runtime.InteropServices.Marshal]::ReadUInt32($ptr, [System.Runtime.InteropServices.Marshal]::OffsetOf([Win32.ShareInfo1], "shi1_type"))
-        $remark = [System.Runtime.InteropServices.Marshal]::PtrToStringUni([IntPtr]::Add($ptr, [System.Runtime.InteropServices.Marshal]::OffsetOf([Win32.ShareInfo1], "shi1_remark")))
-        $share = [ShareInfo1]::new($netname, $type, $remark)
+        $share = [System.Runtime.InteropServices.Marshal]::PtrToStructure($ptr, [Win32.ShareInfo1])
         $shares.Add($share)
     }
 
