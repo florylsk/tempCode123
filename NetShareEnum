@@ -1,0 +1,67 @@
+# Load the netapi32.dll library
+Add-Type -Name NetApi32 -Namespace PInvoke -MemberDefinition '
+[DllImport("netapi32.dll", CharSet = CharSet.Unicode)]
+public static extern uint NetShareEnum(
+    string serverName,
+    uint level,
+    out IntPtr bufPtr,
+    uint prefMaxLen,
+    out uint entriesRead,
+    out uint totalEntries,
+    IntPtr resumeHandle
+);
+'
+
+# Define constants and structures required for the NetShareEnum function
+$MAX_PREFERRED_LENGTH = [uint]::MaxValue
+$STYPE_DISKTREE = 0
+$SHARE_INFO_2 = @"
+using System;
+using System.Runtime.InteropServices;
+
+[StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+public struct SHARE_INFO_2
+{
+    [MarshalAs(UnmanagedType.LPWStr)]
+    public string shi2_netname;
+    public uint shi2_type;
+    [MarshalAs(UnmanagedType.LPWStr)]
+    public string shi2_remark;
+    public uint shi2_permissions;
+    public uint shi2_max_uses;
+    public uint shi2_current_uses;
+    [MarshalAs(UnmanagedType.LPWStr)]
+    public string shi2_path;
+    [MarshalAs(UnmanagedType.LPWStr)]
+    public string shi2_passwd;
+}
+"@
+
+# Call the NetShareEnum function using PInvoke
+$serverName = $null
+$bufPtr = [IntPtr]::Zero
+$entriesRead = 0
+$totalEntries = 0
+$resumeHandle = [IntPtr]::Zero
+
+$status = [PInvoke.NetApi32]::NetShareEnum($serverName, $STYPE_DISKTREE, [ref]$bufPtr, $MAX_PREFERRED_LENGTH, [ref]$entriesRead, [ref]$totalEntries, $resumeHandle)
+
+if ($status -eq 0) {
+    # Convert the buffer to an array of SHARE_INFO_2 structures
+    $bufType = [PInvoke.NetApi32.SHARE_INFO_2]
+    $shareInfo = New-Object System.Collections.Generic.List[$bufType]
+    $offset = $bufPtr.ToInt64()
+
+    for ($i = 0; $i -lt $entriesRead; $i++) {
+        $shareInfo.Add([PInvoke.NetApi32.SHARE_INFO_2]::MarshalFromPtr([IntPtr]$offset))
+        $offset += [Marshal]::SizeOf($bufType)
+    }
+
+    # Display the share information
+    $shareInfo | Format-Table -AutoSize
+}
+
+# Free the buffer allocated by the NetShareEnum function
+if ($bufPtr -ne [IntPtr]::Zero) {
+    [PInvoke.NetApi32]::NetApiBufferFree($bufPtr) | Out-Null
+}
