@@ -1,57 +1,44 @@
-# Define the function signature
-Add-Type @"
-using System;
-using System.Runtime.InteropServices;
-
-public class NetApi32
-{
-    [DllImport("netapi32.dll", SetLastError=true)]
-    public static extern int NetShareEnum(
-        [MarshalAs(UnmanagedType.LPWStr)] string serverName,
-        int level,
-        out IntPtr bufPtr,
-        int prefMaxLen,
-        out int entriesRead,
-        out int totalEntries,
-        ref int resumeHandle
-    );
-
-    [DllImport("netapi32.dll", SetLastError=true)]
-    public static extern int NetApiFree(IntPtr bufPtr);
-}
-
-// Define the data structure to receive the share information
-[StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)]
-public struct SHARE_INFO_1
-{
-    public string shi1_netname;
-    public uint shi1_type;
-    public string shi1_remark;
-}
-
+# Define the PInvoke function signature for NetShareEnum
+$signature = @"
+[DllImport("netapi32.dll", CharSet = CharSet.Unicode)]
+public static extern uint NetShareEnum(
+    string servername,
+    uint level,
+    out IntPtr bufptr,
+    uint prefmaxlen,
+    out uint entriesread,
+    out uint totalentries,
+    IntPtr resume_handle
+);
 "@
 
-$serverName = $null
-$level = 1
+# Load the PInvoke signature into the current PowerShell session
+Add-Type -MemberDefinition $signature -Namespace Win32 -Name NetApi32
+
+# Call NetShareEnum to get a list of local shares
+$shares = New-Object System.Collections.Generic.List[System.String]
 $bufPtr = [IntPtr]::Zero
-$prefMaxLen = -1
 $entriesRead = 0
 $totalEntries = 0
-$resumeHandle = 0
-$result = [NetApi32]::NetShareEnum($serverName, $level, [ref]$bufPtr, $prefMaxLen, [ref]$entriesRead, [ref]$totalEntries, [ref]$resumeHandle)
+$resumeHandle = [IntPtr]::Zero
 
-if ($result -ne 0) {
-Write-Host "Failed to call NetShareEnum. Error code: $result"
+$retval = [Win32.NetApi32]::NetShareEnum($null, 1, [ref]$bufPtr, [System.UInt32]::MaxValue, [ref]$entriesRead, [ref]$totalEntries, $resumeHandle)
+
+if ($retval -eq 0) {
+    # Marshal the returned buffer into an array of SHARE_INFO_1 structs
+    $ptrType = [System.Runtime.InteropServices.Marshal]::SizeOf([Win32.ShareInfo1])
+    for ($i = 0; $i -lt $entriesRead; $i++) {
+        $share = [Win32.ShareInfo1]::PtrToStructure([IntPtr]::Add($bufPtr, $ptrType * $i))
+        $shares.Add($share.shi1_netname)
+    }
+
+    # Free the returned buffer
+    [Win32.NetApi32]::NetApiBufferFree($bufPtr) | Out-Null
+
+    # Output the list of shares
+    Write-Host "Local shares:"
+    $shares
 }
 else {
-# Get the data from the buffer pointer
-$shareInfo = [Marshal]::PtrToStructure($bufPtr, [Type][NetApi32.SHARE_INFO_1])
-for ($i = 0; $i -lt $entriesRead; $i++) {
-# Write the share information to the console
-Write-Host "Share name: $($shareInfo[$i].shi1_netname)"
-Write-Host "Share type: $($shareInfo[$i].shi1_type)"
-Write-Host "Share remark: $($shareInfo[$i].shi1_remark)"
+    Write-Error "NetShareEnum failed with error code $retval"
 }
-
-[NetApi32]::NetApiFree($bufPtr)
-
