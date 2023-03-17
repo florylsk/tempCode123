@@ -8,15 +8,15 @@ public static extern uint NetShareEnum(
     uint prefMaxLen,
     out uint entriesRead,
     out uint totalEntries,
-    IntPtr resumeHandle
+    out uint resumeHandle
 );
+
+[DllImport("netapi32.dll", SetLastError=true)]
+public static extern uint NetApiBufferFree(IntPtr buffer);
 '
 
-# Define constants and structures required for the NetShareEnum function
-$MAX_PREFERRED_LENGTH = [uint]::MaxValue
-$STYPE_DISKTREE = 0
-$SHARE_INFO_2 = @"
-using System;
+# Define the SHARE_INFO_2 structure
+Add-Type -TypeDefinition @"
 using System.Runtime.InteropServices;
 
 [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
@@ -39,12 +39,14 @@ public struct SHARE_INFO_2
 
 # Call the NetShareEnum function using PInvoke
 $serverName = $null
+$level = 2
 $bufPtr = [IntPtr]::Zero
+$prefMaxLen = [System.UInt32]::MaxValue
 $entriesRead = 0
 $totalEntries = 0
-$resumeHandle = [IntPtr]::Zero
+$resumeHandle = 0
 
-$status = [PInvoke.NetApi32]::NetShareEnum($serverName, $STYPE_DISKTREE, [ref]$bufPtr, $MAX_PREFERRED_LENGTH, [ref]$entriesRead, [ref]$totalEntries, $resumeHandle)
+$status = [PInvoke.NetApi32]::NetShareEnum($serverName, $level, [ref]$bufPtr, $prefMaxLen, [ref]$entriesRead, [ref]$totalEntries, [ref]$resumeHandle)
 
 if ($status -eq 0) {
     # Convert the buffer to an array of SHARE_INFO_2 structures
@@ -53,7 +55,7 @@ if ($status -eq 0) {
     $offset = $bufPtr.ToInt64()
 
     for ($i = 0; $i -lt $entriesRead; $i++) {
-        $shareInfo.Add([PInvoke.NetApi32.SHARE_INFO_2]::MarshalFromPtr([IntPtr]$offset))
+        $shareInfo.Add([PInvoke.NetApi32.SHARE_INFO_2]::MarshalPtrToStructure([IntPtr]$offset, $bufType))
         $offset += [Marshal]::SizeOf($bufType)
     }
 
