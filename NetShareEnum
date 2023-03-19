@@ -1,37 +1,131 @@
-$signature = @"
-[DllImport("netapi32.dll", SetLastError=true)]
-public static extern int NetShareEnum(
-    string servername,
-    int level,
-    out IntPtr bufPtr,
-    int prefmaxlen,
-    out int entriesread,
-    out int totalentries,
-    out int resume_handle
-);
-"@
+#include <windows.h>
 
-# Add the PInvoke signature to the PowerShell session
-Add-Type -MemberDefinition $signature -Namespace Win32 -Name NetApi32
+#include <stdio.h>
 
-# Call the NetShareEnum function to list local shares
-$bufPtr = [IntPtr]::Zero
-$entriesread = 0
-$totalentries = 0
-$resume_handle = 0
-$result = [Win32.NetApi32]::NetShareEnum($env:COMPUTERNAME, 1, [ref]$bufPtr, -1, [ref]$entriesread, [ref]$totalentries, [ref]$resume_handle)
+#include <lm.h>
 
-# Check if the call to NetShareEnum succeeded
-if ($result -eq 0) {
-    # Convert the pointer to a structure array and iterate over the shares
-    $shareInfo = [System.Runtime.InteropServices.Marshal]::PtrToStructure($bufPtr, [Type][Win32.SHARE_INFO_1])
-    for ($i = 0; $i -lt $entriesread; $i++) {
-        Write-Host $shareInfo[$i].shi1_netname
-    }
+ 
 
-    # Free the memory allocated by NetShareEnum
-    [Win32.NetApi32]::NetApiBufferFree($bufPtr)
-}
-else {
-    Write-Error "NetShareEnum failed with error code $result"
+#pragma comment(lib, Netapi32.lib)
+
+ 
+
+int wmain(int argc, WCHAR *lpszArgv[])
+
+{
+
+   PSHARE_INFO_502 BufPtr,p;
+
+   NET_API_STATUS res;
+
+   LPTSTR   lpszServer = NULL;
+
+   DWORD er=0,tr=0,resume=0, i;
+
+ 
+
+   switch(argc)
+
+   {
+
+   case 2:
+
+      lpszServer = lpszArgv[1];
+
+      break;
+
+   default:
+
+      wprintf(LUsage: %s <servername>\n, lpszArgv[0]);
+
+      return 1;
+
+   }
+
+ 
+
+   // Print a report header.
+
+   wprintf(LShare               Local Path                           Uses    Descriptor\n);
+
+   wprintf(L------------------------------------------------------------------------------\n);
+
+ 
+
+   // Call the NetShareEnum() function; specify level 502.
+
+   do // begin do
+
+   {
+
+      res = NetShareEnum(lpszServer, 502, (LPBYTE *) &BufPtr, -1, &er, &tr, &resume);
+
+ 
+
+      // If the call succeeds,
+
+      if(res == ERROR_SUCCESS || res == ERROR_MORE_DATA)
+
+      {
+
+         p=BufPtr;
+
+ 
+
+         wprintf(LNetShareEnum() is OK!\n);
+
+ 
+
+         // Loop through the entries;
+
+         //  print retrieved data.
+
+         for(i=1;i<=er;i++)
+
+         {
+
+            wprintf(L%-20s%-45s%-8u,p->shi502_netname, p->shi502_path, p->shi502_current_uses);
+
+ 
+
+            // Validate the value of the
+
+            //  shi502_security_descriptor member.
+
+            if (IsValidSecurityDescriptor(p->shi502_security_descriptor))
+
+               wprintf(LYes\n);
+
+            else
+
+               wprintf(LNo\n);
+
+            p++;
+
+         }
+
+ 
+
+         // Free the allocated buffer.
+
+         NetApiBufferFree(BufPtr);
+
+      }
+
+      else
+
+        {
+
+              wprintf(LNetShareEnum() failed! Error: %ld\n, res);
+
+        }
+
+   }
+
+   // Continue to call NetShareEnum() while there are more entries.
+
+   while (res==ERROR_MORE_DATA); // end do
+
+   return 0;
+
 }
