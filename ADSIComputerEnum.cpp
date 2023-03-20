@@ -1,3 +1,6 @@
+// ConsoleApplication3.cpp : Defines the entry point for the console application.
+//
+
 #include "stdafx.h"
 #include <objbase.h>
 #include <wchar.h>
@@ -141,3 +144,66 @@ HRESULT FindComputers(IDirectorySearch *pContainerToSearch)  //  IDirectorySearc
 	int iCount = 0;
 	DWORD x = 0L;
 	
+
+	//  Return non-verbose list properties only.
+	hr = pContainerToSearch->ExecuteSearch(pszSearchFilter,
+		pszNonVerboseList,
+		sizeof(pszNonVerboseList) / sizeof(LPOLESTR),
+		&hSearch
+		);
+
+	if (SUCCEEDED(hr))
+	{
+		//  Call IDirectorySearch::GetNextRow() to retrieve the next data row.
+		hr = pContainerToSearch->GetFirstRow(hSearch);
+		if (SUCCEEDED(hr))
+		{
+			while (hr != S_ADS_NOMORE_ROWS)
+			{
+				//  Keep track of count.
+				iCount++;
+				
+				//  Loop through the array of passed column names,
+				//  print the data for each column.
+
+				while (pContainerToSearch->GetNextColumnName(hSearch, &pszColumn) != S_ADS_NOMORE_COLUMNS)
+				{
+					hr = pContainerToSearch->GetColumn(hSearch, pszColumn, &col);
+					if (SUCCEEDED(hr))
+					{
+						//  Verbose handles only the two single-valued attributes: cn and ldapdisplayname,
+						//  so this is a special case.
+						if (0 == wcscmp(L"name", pszColumn))
+						{
+							//wcscpy_s(szName, col.pADsValues->CaseIgnoreString);
+							szName = col.pADsValues->CaseIgnoreString;
+						}
+						if (0 == wcscmp(L"distinguishedName", pszColumn))
+						{
+							//wcscpy_s(szDN, col.pADsValues->CaseIgnoreString);
+							szDN = col.pADsValues->CaseIgnoreString;
+						}
+			
+						pContainerToSearch->FreeColumn(&col);
+					}
+					FreeADsMem(pszColumn);
+				}
+				
+				wprintf(L"%s\n  DN: %s\n\n", szName, szDN);
+
+				//  Get the next row.
+				hr = pContainerToSearch->GetNextRow(hSearch);
+			}
+
+		}
+		//  Close the search handle to cleanup.
+		pContainerToSearch->CloseSearchHandle(hSearch);
+	}
+	if (SUCCEEDED(hr) && 0 == iCount)
+		hr = S_FALSE;
+
+	delete[] szName;
+	delete[] szDN;
+	delete[] pszSearchFilter;
+	return hr;
+}
