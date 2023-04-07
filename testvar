@@ -1,0 +1,30 @@
+# Define the constants used by the Debugging API
+$DEBUG_ATTACH_LOCAL_ONLY = 0x00000004
+$DEBUG_CREATE_PROCESS_NO_DEBUG_HEAP = 0x00000400
+$DEBUG_PROCESS = 0x00000001
+$MINIDUMP_STREAM_TYPE = 0x00000007
+
+# Specify the path to the MiniDump file
+$dumpFilePath = "C:\path\to\lsass.dmp"
+
+# Load the Debugging API DLL
+Add-Type -Path "C:\Windows\System32\dbgeng.dll"
+
+# Create a Debugging API client
+$client = New-Object Microsoft.Debugging.Client.DebugClient
+
+# Attach the client to the MiniDump file
+$client.AttachKernel($DEBUG_ATTACH_LOCAL_ONLY, $DEBUG_CREATE_PROCESS_NO_DEBUG_HEAP)
+
+# Create a Debugging API control object
+$control = $client.CreateControl()
+
+# Open the MiniDump file as a dump file
+$control.OpenDumpFile($dumpFilePath)
+
+# Read the memory contents of the MiniDump file
+$memoryStream = $control.ReadDumpStream($MINIDUMP_STREAM_TYPE)
+
+# Convert the memory stream to a byte array
+$memoryBytes = New-Object Byte[] $memoryStream.Length
+$memoryStream.Read($memoryBytes, 0, $memoryStream.Length)
